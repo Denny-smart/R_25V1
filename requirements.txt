@@ -1,0 +1,5 @@
+# deriv-api-python  # <--- Change made here
+pandas
+pandas-ta
+numpy
+python-dotenv
