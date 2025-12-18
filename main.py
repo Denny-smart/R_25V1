@@ -1,7 +1,7 @@
 """
 Main Controller for Deriv R_25 Multipliers Trading Bot
 Coordinates all components and runs the trading loop
-main.py - COMPLETE FIXED VERSION
+main.py - COMPLETE FIXED VERSION WITH DYNAMIC CANCELLATION
 """
 
 import asyncio
@@ -14,10 +14,17 @@ from data_fetcher import DataFetcher
 from strategy import TradingStrategy
 from trade_engine import TradeEngine
 from risk_manager import RiskManager
-from telegram_notifier import notifier
 
 # Setup logger
 logger = setup_logger(config.LOG_FILE, config.LOG_LEVEL)
+
+# Try to import telegram notifier
+try:
+    from telegram_notifier import notifier
+    TELEGRAM_ENABLED = True
+except ImportError:
+    TELEGRAM_ENABLED = False
+    logger.warning("⚠️ Telegram notifier not available")
 
 class TradingBot:
     """Main trading bot controller"""
@@ -86,20 +93,28 @@ class TradingBot:
             balance = await self.data_fetcher.get_balance()
             if balance:
                 logger.info(f"💰 Account Balance: {format_currency(balance)}")
-                try:
-                    await notifier.notify_bot_started(balance)  # TELEGRAM NOTIFICATION
-                except Exception as e:
-                    logger.error(f"❌ Telegram notification failed: {e}")
+                if TELEGRAM_ENABLED:
+                    try:
+                        await notifier.notify_bot_started(balance)
+                    except Exception as e:
+                        logger.error(f"❌ Telegram notification failed: {e}")
             
             # Log trading parameters
             logger.info("="*60)
-            logger.info("TRADING PARAMETERS")
+            logger.info("TRADING PARAMETERS - TWO-PHASE SYSTEM")
             logger.info("="*60)
             logger.info(f"📊 Symbol: {config.SYMBOL}")
             logger.info(f"📈 Multiplier: {config.MULTIPLIER}x")
             logger.info(f"💵 Stake: {format_currency(config.FIXED_STAKE)}")
-            logger.info(f"🎯 Take Profit: {config.TAKE_PROFIT_PERCENT}%")
-            logger.info(f"🛑 Stop Loss: {config.STOP_LOSS_PERCENT}%")
+            
+            if config.ENABLE_CANCELLATION:
+                logger.info(f"🛡️ Cancellation: ENABLED ({config.CANCELLATION_DURATION}s)")
+                logger.info(f"   Phase 2 TP: {config.POST_CANCEL_TAKE_PROFIT_PERCENT}%")
+                logger.info(f"   Phase 2 SL: {config.POST_CANCEL_STOP_LOSS_PERCENT}%")
+            else:
+                logger.info(f"🎯 Take Profit: {config.TAKE_PROFIT_PERCENT}%")
+                logger.info(f"🛑 Stop Loss: {config.STOP_LOSS_PERCENT}%")
+            
             logger.info(f"⏰ Cooldown: {config.COOLDOWN_SECONDS}s")
             logger.info(f"🔢 Max Daily Trades: {config.MAX_TRADES_PER_DAY}")
             logger.info(f"💸 Max Daily Loss: {format_currency(config.MAX_DAILY_LOSS)}")
@@ -133,7 +148,12 @@ class TradingBot:
                 logger.info("="*60)
                 stats = self.risk_manager.get_statistics()
                 print_statistics(stats)
-                await notifier.notify_bot_stopped(stats)  # TELEGRAM NOTIFICATION
+                
+                if TELEGRAM_ENABLED:
+                    try:
+                        await notifier.notify_bot_stopped(stats)
+                    except Exception as e:
+                        logger.error(f"❌ Telegram notification failed: {e}")
             
             logger.info("✅ Bot shutdown complete")
             
@@ -172,27 +192,31 @@ class TradingBot:
                 return
             
             # Notify signal detected
-            await notifier.notify_signal(signal)  # TELEGRAM NOTIFICATION
+            if TELEGRAM_ENABLED:
+                try:
+                    await notifier.notify_signal(signal)
+                except Exception as e:
+                    logger.error(f"❌ Telegram notification failed: {e}")
             
-            # Validate trade parameters
+            # ✅ FIXED: Validate only stake (TP/SL are calculated automatically)
             valid, msg = self.risk_manager.validate_trade_parameters(
-                config.FIXED_STAKE,
-                config.TAKE_PROFIT_PERCENT,
-                config.STOP_LOSS_PERCENT
+                stake=config.FIXED_STAKE
+                # TP/SL not needed - handled automatically by trade_engine
             )
             
             if not valid:
                 logger.warning(f"⚠️ Invalid trade parameters: {msg}")
                 return
             
-            # ⭐⭐⭐ FIXED: Use execute_trade method that handles everything ⭐⭐⭐
+            # Execute trade using the integrated execute_trade method
             logger.info(f"🚀 Executing {signal['signal']} trade...")
             
             # This single method call handles:
-            # 1. Opening the trade
+            # 1. Opening the trade (with dynamic cancellation fee)
             # 2. Recording it with risk manager
-            # 3. Monitoring until close
-            # 4. Returning final status
+            # 3. Phase 1: Monitoring cancellation period
+            # 4. Phase 2: Monitoring committed trade with TP/SL
+            # 5. Returning final status
             result = await self.trade_engine.execute_trade(signal, self.risk_manager)
             
             if result:
@@ -214,16 +238,24 @@ class TradingBot:
                 logger.info(f"💰 Total P&L: {format_currency(stats['total_pnl'])}")
                 logger.info(f"📊 Trades Today: {stats['trades_today']}/{config.MAX_TRADES_PER_DAY}")
                 
-                # Send Telegram notification for trade result
-                # Get the trade info from risk manager for notification
-                trade_info = None
-                for t in self.risk_manager.trades_today:
-                    if t.get('contract_id') == contract_id:
-                        trade_info = t
-                        break
+                if config.ENABLE_CANCELLATION:
+                    logger.info(f"🛡️ Cancelled: {stats.get('trades_cancelled', 0)}")
+                    logger.info(f"✅ Committed: {stats.get('trades_committed', 0)}")
                 
-                if trade_info:
-                    await notifier.notify_trade_closed(result, trade_info)
+                # Send Telegram notification for trade result
+                if TELEGRAM_ENABLED:
+                    # Get the trade info from risk manager for notification
+                    trade_info = None
+                    for t in self.risk_manager.trades_today:
+                        if t.get('contract_id') == contract_id:
+                            trade_info = t
+                            break
+                    
+                    if trade_info:
+                        try:
+                            await notifier.notify_trade_closed(result, trade_info)
+                        except Exception as e:
+                            logger.error(f"❌ Telegram notification failed: {e}")
             else:
                 logger.error("❌ Trade execution failed")
             
@@ -297,10 +329,12 @@ def main():
         # Print welcome banner
         print("\n" + "="*60)
         print("   DERIV R_25 MULTIPLIERS TRADING BOT")
+        print("   WITH DYNAMIC CANCELLATION FEE")
         print("="*60)
-        print(f"   Version: 1.0")
+        print(f"   Version: 2.0 (Two-Phase Risk)")
         print(f"   Symbol: {config.SYMBOL}")
         print(f"   Multiplier: {config.MULTIPLIER}x")
+        print(f"   Cancellation: {'Enabled' if config.ENABLE_CANCELLATION else 'Disabled'}")
         print("="*60 + "\n")
         
         # Create and run bot
