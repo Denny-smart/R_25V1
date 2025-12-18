@@ -259,7 +259,8 @@ class TradeEngine:
         """
         try:
             # Add 10% tolerance to handle small price movements
-            max_price = price * 1.10
+            # Round to 2 decimal places as required by Deriv API
+            max_price = round(price * 1.10, 2)
             
             buy_request = {
                 "buy": proposal_id,
