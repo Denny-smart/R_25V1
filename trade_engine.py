@@ -1,6 +1,6 @@
 """
 Trade Engine for Deriv R_25 Trading Bot
-Handles trade execution and monitoring - FINAL FIXED VERSION
+Handles trade execution and monitoring - FIXED WITH PROPER LIMIT_ORDER
 trade_engine.py
 """
 
@@ -45,6 +45,30 @@ class TradeEngine:
         self.active_contract_id = None
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = 5
+        
+        # ⭐ Calculate TP/SL amounts (DOLLAR AMOUNTS, NOT PERCENTAGES) ⭐
+        self.take_profit_amount = self._calculate_tp_amount()
+        self.stop_loss_amount = self._calculate_sl_amount()
+        
+        logger.info(f"🎯 TP/SL calculated:")
+        logger.info(f"   Take Profit: {format_currency(self.take_profit_amount)}")
+        logger.info(f"   Stop Loss: {format_currency(self.stop_loss_amount)}")
+    
+    def _calculate_tp_amount(self) -> float:
+        """
+        Calculate Take Profit in dollar amount
+        TP Amount = (TP% / 100) × Stake × Multiplier
+        """
+        tp_amount = (config.TAKE_PROFIT_PERCENT / 100) * config.FIXED_STAKE * config.MULTIPLIER
+        return round(tp_amount, 2)
+    
+    def _calculate_sl_amount(self) -> float:
+        """
+        Calculate Stop Loss in dollar amount
+        SL Amount = (SL% / 100) × Stake × Multiplier
+        """
+        sl_amount = (config.STOP_LOSS_PERCENT / 100) * config.FIXED_STAKE * config.MULTIPLIER
+        return round(sl_amount, 2)
     
     async def connect(self) -> bool:
         """
@@ -175,13 +199,13 @@ class TradeEngine:
     async def open_trade(self, direction: str, stake: float, 
                         take_profit_percent: float, stop_loss_percent: float) -> Optional[Dict]:
         """
-        Open a multiplier trade
+        Open a multiplier trade with PROPER limit_order format
         
         Args:
             direction: 'UP' or 'DOWN' or 'BUY' or 'SELL'
             stake: Stake amount
-            take_profit_percent: Take profit as percentage of entry price
-            stop_loss_percent: Stop loss as percentage of entry price
+            take_profit_percent: Take profit as percentage (for logging only)
+            stop_loss_percent: Stop loss as percentage (for logging only)
         
         Returns:
             Trade information dictionary or None if failed
@@ -193,22 +217,31 @@ class TradeEngine:
             else:
                 contract_type = config.CONTRACT_TYPE_DOWN  # MULTDOWN
             
-            # Build the buy request (without limit orders initially)
+            # ⭐ CRITICAL FIX: Use DOLLAR AMOUNTS in limit_order ⭐
             buy_request = {
                 "buy": 1,
                 "price": stake,
                 "parameters": {
                     "amount": stake,
+                    "amount_type": "stake",
                     "basis": "stake",
                     "contract_type": contract_type,
                     "currency": "USD",
                     "multiplier": config.MULTIPLIER,
-                    "symbol": config.SYMBOL
+                    "symbol": config.SYMBOL,
+                    "limit_order": {  # ⭐ THIS IS THE KEY FIX ⭐
+                        "take_profit": self.take_profit_amount,  # Dollar amount, not percentage!
+                        "stop_loss": self.stop_loss_amount       # Dollar amount, not percentage!
+                    }
                 }
             }
             
             logger.info(f"📤 Sending {direction} trade request...")
-            logger.info(f"   Stake: {format_currency(stake)} | TP: {take_profit_percent}% | SL: {stop_loss_percent}%")
+            logger.info(f"   Contract Type: {contract_type}")
+            logger.info(f"   Stake: {format_currency(stake)}")
+            logger.info(f"   Multiplier: {config.MULTIPLIER}x")
+            logger.info(f"   TP Amount: {format_currency(self.take_profit_amount)} (target: $2.00)")
+            logger.info(f"   SL Amount: {format_currency(self.stop_loss_amount)} (max loss: $1.00)")
             
             response = await self.send_request(buy_request)
             
@@ -227,11 +260,8 @@ class TradeEngine:
             # Extract trade information
             buy_info = response["buy"]
             contract_id = buy_info["contract_id"]
-            entry_price = float(buy_info.get("buy_price", 0))
-            
-            # Calculate TP and SL amounts based on entry price and percentages
-            take_profit_amount = entry_price * (take_profit_percent / 100)
-            stop_loss_amount = entry_price * (stop_loss_percent / 100)
+            entry_price = float(buy_info.get("buy_price", stake))
+            longcode = buy_info.get("longcode", "")
             
             self.active_contract_id = contract_id
             
@@ -240,21 +270,23 @@ class TradeEngine:
                 'direction': direction,
                 'stake': stake,
                 'entry_price': entry_price,
-                'take_profit': take_profit_amount,
-                'stop_loss': stop_loss_amount,
+                'take_profit': self.take_profit_amount,  # Store dollar amount
+                'stop_loss': self.stop_loss_amount,      # Store dollar amount
                 'take_profit_percent': take_profit_percent,
                 'stop_loss_percent': stop_loss_percent,
                 'multiplier': config.MULTIPLIER,
+                'contract_type': contract_type,
                 'open_time': datetime.now(),
-                'status': 'open'
+                'status': 'open',
+                'longcode': longcode
             }
             
             logger.info(f"✅ Trade opened successfully!")
             logger.info(f"   Contract ID: {contract_id}")
             logger.info(f"   Entry Price: {entry_price:.2f}")
-            logger.info(f"   Direction: {direction}")
-            logger.info(f"   TP: {format_currency(take_profit_amount)} ({take_profit_percent}%)")
-            logger.info(f"   SL: {format_currency(stop_loss_amount)} ({stop_loss_percent}%)")
+            logger.info(f"   Direction: {direction} ({contract_type})")
+            logger.info(f"   TP will trigger at: {format_currency(self.take_profit_amount)} profit")
+            logger.info(f"   SL will trigger at: {format_currency(self.stop_loss_amount)} loss")
             
             # Send Telegram notification
             if notifier is not None:
@@ -319,7 +351,7 @@ class TradeEngine:
     
     async def get_trade_status(self, contract_id: str) -> Optional[Dict]:
         """
-        Get current status of a trade - FIXED: Better status detection
+        Get current status of a trade
         
         Args:
             contract_id: Contract ID
@@ -328,7 +360,6 @@ class TradeEngine:
             Trade status dictionary or None if failed
         """
         try:
-            # FIXED: Don't include "subscribe": 0
             proposal_request = {
                 "proposal_open_contract": 1,
                 "contract_id": contract_id
@@ -350,7 +381,7 @@ class TradeEngine:
             is_sold = contract.get('is_sold', 0) == 1
             profit = float(contract.get('profit', 0))
             
-            # ⭐ IMPROVED: Determine status from profit if status is None/unknown ⭐
+            # Determine status from profit if status is None/unknown
             if trade_status is None or trade_status == '' or trade_status == 'unknown':
                 if is_sold:
                     # Trade is closed, determine win/loss from P&L
@@ -387,13 +418,14 @@ class TradeEngine:
     async def monitor_trade(self, contract_id: str, trade_info: Dict,
                           max_duration: int = 3600, risk_manager=None) -> Optional[Dict]:
         """
-        Monitor an active trade until it closes - WITH DYNAMIC EXIT LOGIC
+        Monitor an active trade until it closes
+        NOTE: With proper limit_order, Deriv handles TP/SL automatically!
         
         Args:
             contract_id: Contract ID to monitor
             trade_info: Original trade information (for notifications)
             max_duration: Maximum duration in seconds
-            risk_manager: RiskManager instance for dynamic exit checks
+            risk_manager: RiskManager instance (for early exits beyond TP/SL)
         
         Returns:
             Final trade result dictionary
@@ -407,6 +439,7 @@ class TradeEngine:
             previous_price = trade_info.get('entry_price', 0.0)
             
             logger.info(f"👁️ Monitoring trade {contract_id}...")
+            logger.info(f"   ⚡ Deriv will auto-close at TP: {format_currency(self.take_profit_amount)} or SL: {format_currency(self.stop_loss_amount)}")
             
             while True:
                 # Check if max duration exceeded
@@ -432,7 +465,7 @@ class TradeEngine:
                     await asyncio.sleep(monitor_interval)
                     continue
                 
-                # ⭐ NEW: Check dynamic exit conditions ⭐
+                # ⭐ OPTIONAL: Check additional dynamic exit conditions beyond TP/SL ⭐
                 if risk_manager is not None:
                     current_pnl = status['profit']
                     current_price = status['current_price']
@@ -461,9 +494,8 @@ class TradeEngine:
                     # Update previous price for next iteration
                     previous_price = current_price
                 
-                # Check if trade is closed naturally
+                # Check if trade is closed (by TP/SL or otherwise)
                 if status['is_sold'] or status['status'] in ['sold', 'won', 'lost']:
-                    # ⭐ IMPROVED: Better status determination ⭐
                     trade_status = status.get('status', 'closed')
                     final_pnl = status.get('profit', 0)
                     
@@ -477,7 +509,15 @@ class TradeEngine:
                             trade_status = 'sold'
                     
                     emoji = get_status_emoji(trade_status)
-                    logger.info(f"{emoji} Trade closed | Status: {trade_status.upper()}")
+                    
+                    # ⭐ Log whether it hit TP or SL ⭐
+                    if abs(final_pnl - self.take_profit_amount) < 0.1:
+                        logger.info(f"🎯 {emoji} Trade hit TAKE PROFIT target!")
+                    elif abs(abs(final_pnl) - self.stop_loss_amount) < 0.1:
+                        logger.info(f"🛑 {emoji} Trade hit STOP LOSS!")
+                    else:
+                        logger.info(f"{emoji} Trade closed | Status: {trade_status.upper()}")
+                    
                     logger.info(f"   Final P&L: {format_currency(status['profit'])}")
                     
                     # Send Telegram notification for trade close
@@ -496,15 +536,13 @@ class TradeEngine:
                 # Log detailed status every 30 seconds
                 time_since_last_log = (datetime.now() - last_status_log).total_seconds()
                 if time_since_last_log >= status_log_interval:
-                    log_msg = f"📊 Status Update | P&L: {format_currency(current_pnl)} | Price: {current_price:.2f} | Elapsed: {int(elapsed)}s"
+                    pnl_emoji = "📈" if current_pnl >= 0 else "📉"
+                    log_msg = f"{pnl_emoji} P&L: {format_currency(current_pnl)} | Price: {current_price:.2f} | {int(elapsed)}s"
                     
-                    # ⭐ NEW: Add exit strategy info to log ⭐
-                    if risk_manager is not None:
-                        exit_status = risk_manager.get_exit_status(current_pnl)
-                        if exit_status['trailing_stop_active']:
-                            log_msg += f" | Trail: {format_currency(exit_status['trailing_stop_level'])}"
-                        elif exit_status['percentage_to_target'] >= 70:
-                            log_msg += f" | {exit_status['percentage_to_target']:.0f}% to target"
+                    # Show progress to target
+                    pnl_to_target_pct = (current_pnl / self.take_profit_amount * 100) if self.take_profit_amount > 0 else 0
+                    if pnl_to_target_pct > 0:
+                        log_msg += f" | {pnl_to_target_pct:.0f}% to TP"
                     
                     logger.info(log_msg)
                     last_status_log = datetime.now()
@@ -517,21 +555,14 @@ class TradeEngine:
             import traceback
             logger.error(traceback.format_exc())
             return None
-                
-        except Exception as e:
-            logger.error(f"❌ Error monitoring trade: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return None
     
     async def execute_trade(self, signal: Dict, risk_manager) -> Optional[Dict]:
         """
         Execute complete trade cycle: open, monitor, close
-        WITH DYNAMIC EXIT LOGIC
         
         Args:
             signal: Trading signal dictionary
-            risk_manager: RiskManager instance to record trades and handle exits
+            risk_manager: RiskManager instance to record trades
         
         Returns:
             Final trade result or None if failed
@@ -539,7 +570,7 @@ class TradeEngine:
         try:
             direction = signal['signal']
             
-            # Open trade
+            # Open trade with proper limit_order
             trade_info = await self.open_trade(
                 direction=direction,
                 stake=config.FIXED_STAKE,
@@ -553,12 +584,12 @@ class TradeEngine:
             # Record trade opening with risk manager
             risk_manager.record_trade_open(trade_info)
             
-            # Monitor trade until it closes (pass risk_manager for dynamic exits)
+            # Monitor trade until it closes
             final_status = await self.monitor_trade(
                 trade_info['contract_id'],
                 trade_info,
                 max_duration=config.MAX_TRADE_DURATION,
-                risk_manager=risk_manager  # ⭐ Pass risk_manager for dynamic exit checks ⭐
+                risk_manager=risk_manager
             )
             
             # CRITICAL: If monitoring failed, unlock the trade slot

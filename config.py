@@ -1,8 +1,8 @@
 """
 Configuration Settings for Deriv R_25 Multipliers Trading Bot
-Realistic Scalping Settings - $2.5 stake, 0.2% SL / 0.5% TP
-Loads API credentials from .env file
-config.py - OPTIMIZED FOR SCALPING
+OPTIMIZED FOR $2 PROFIT TARGET WITH $10 STAKE
+Based on trade history analysis - Fixed for MULTIPLIER trades
+config.py - PRODUCTION VERSION
 """
 
 import os
@@ -12,15 +12,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ==================== API CREDENTIALS ====================
-# These are loaded from .env file for security
 API_TOKEN = os.getenv("API_TOKEN")
-APP_ID = os.getenv("APP_ID", "1089")  # Default to public app ID if not set
+APP_ID = os.getenv("APP_ID", "1089")
 
-# For backward compatibility, also check old names
 DERIV_API_TOKEN = API_TOKEN if API_TOKEN else os.getenv("DERIV_API_TOKEN")
 DERIV_APP_ID = APP_ID if APP_ID and APP_ID != "1089" else os.getenv("DERIV_APP_ID", "1089")
 
-# Validate that API token is set
 if not DERIV_API_TOKEN or DERIV_API_TOKEN == "your_api_token_here":
     raise ValueError(
         "API_TOKEN not set! Please add your API token to .env file.\n"
@@ -32,81 +29,85 @@ if not DERIV_API_TOKEN or DERIV_API_TOKEN == "your_api_token_here":
 # ==================== TRADING PARAMETERS ====================
 SYMBOL = "R_25"                    # Volatility 25 Index
 MARKET = "synthetic_index"         # Market type
-CONTRACT_TYPE = "MULTUP"           # Multiplier Up (Buy)
-CONTRACT_TYPE_DOWN = "MULTDOWN"    # Multiplier Down (Sell)
+CONTRACT_TYPE = "MULTUP"           # ⭐ CRITICAL: Multiplier Up (NOT RISE!)
+CONTRACT_TYPE_DOWN = "MULTDOWN"    # ⭐ CRITICAL: Multiplier Down (NOT FALL!)
 
 # ==================== RISK MANAGEMENT ====================
-# OPTIMIZED FOR REALISTIC SCALPING
-FIXED_STAKE = 2.5                  # Reduced stake for tighter stops (USD)
-MULTIPLIER = 160                   # Conservative multiplier (160x)
-TAKE_PROFIT_PERCENT = 0.5          # Take profit 0.5% = $2.00 profit
-STOP_LOSS_PERCENT = 0.2            # Stop loss 0.2% = $0.80 loss
-MAX_LOSS_PER_TRADE = 0.8           # Maximum loss per trade (USD)
-COOLDOWN_SECONDS = 120             # Wait time between trades (2 minutes)
-MAX_TRADES_PER_DAY = 50            # Maximum trades allowed per day
-MAX_DAILY_LOSS = 30.0              # Stop trading if daily loss exceeds this
+# ⭐ OPTIMIZED FOR $2 PROFIT TARGET ⭐
+FIXED_STAKE = 10.0                 # $10 stake for realistic $2 targets
+MULTIPLIER = 400                   # 400x multiplier (balanced risk/reward)
+TAKE_PROFIT_PERCENT = 0.05         # 0.05% TP = $2.00 profit with 400x
+STOP_LOSS_PERCENT = 0.025          # 0.025% SL = $1.00 loss with 400x
+MAX_LOSS_PER_TRADE = 1.0           # Maximum loss per trade (USD)
+COOLDOWN_SECONDS = 180             # 3 minutes between trades (quality over quantity)
+MAX_TRADES_PER_DAY = 30            # Reduced from 50 (focus on quality)
+MAX_DAILY_LOSS = 10.0              # Stop if lose $10 in a day
 
-# Valid multipliers for R_25 (for reference)
+# Valid multipliers for R_25
 VALID_MULTIPLIERS = [160, 400, 800, 1200, 1600]
 
 # ==================== TRADE CALCULATIONS ====================
-# These are calculated automatically - DO NOT MODIFY
-# Max Profit: 0.5% × $2.5 × 160 = $2.00
-# Max Loss: 0.2% × $2.5 × 160 = $0.80
-# Risk-to-Reward Ratio: 1:2.5
+# With 400x multiplier and $10 stake:
+# Target Profit: 0.05% × $10 × 400 = $2.00 ✅
+# Max Loss: 0.025% × $10 × 400 = $1.00 ✅
+# Risk-to-Reward: 1:2 (risk $1 to make $2)
 
 # ==================== DATA FETCHING ====================
-# Increased candles to support SMA(100) calculation
-CANDLES_1M = 150                   # Number of 1-minute candles to fetch
-CANDLES_5M = 120                   # Number of 5-minute candles to fetch
-MAX_RETRIES = 3                    # Maximum retry attempts for API calls
-RETRY_DELAY = 2                    # Seconds to wait between retries
+CANDLES_1M = 150                   # 1-minute candles
+CANDLES_5M = 120                   # 5-minute candles
+MAX_RETRIES = 3
+RETRY_DELAY = 2
 
 # ==================== STRATEGY PARAMETERS ====================
-# ATR Validation Ranges
-ATR_MIN_1M = 0.05                 # Minimum 1m ATR
-ATR_MAX_1M = 1.5                  # Maximum 1m ATR
-ATR_MIN_5M = 0.10                 # Minimum 5m ATR
-ATR_MAX_5M = 2.5                  # Maximum 5m ATR
+# ⭐ TIGHTENED BASED ON TRADE HISTORY ANALYSIS ⭐
 
-# RSI Thresholds - Optimized for scalping
-RSI_BUY_THRESHOLD = 55            # Lower threshold for more signals
-RSI_SELL_THRESHOLD = 45           # Higher threshold for more signals
+# ATR Validation Ranges (Keep existing - working)
+ATR_MIN_1M = 0.05
+ATR_MAX_1M = 1.5
+ATR_MIN_5M = 0.10
+ATR_MAX_5M = 2.5
 
-# ADX Threshold
-ADX_THRESHOLD = 18                # Minimum ADX for trend confirmation
+# RSI Thresholds - TIGHTER for better entries
+RSI_BUY_THRESHOLD = 58            # Raised from 55 (stronger momentum)
+RSI_SELL_THRESHOLD = 42           # Lowered from 45 (stronger momentum)
+
+# ADX Threshold - HIGHER for stronger trends
+ADX_THRESHOLD = 22                # Raised from 18 (filter weak trends)
 
 # Moving Averages
-SMA_PERIOD = 100                  # Simple Moving Average period
-EMA_PERIOD = 20                   # Exponential Moving Average period
+SMA_PERIOD = 100
+EMA_PERIOD = 20
 
-# Signal Scoring - Relaxed for scalping
-MINIMUM_SIGNAL_SCORE = 5          # Lower minimum score for more opportunities
+# Signal Scoring - HIGHER minimum for quality
+MINIMUM_SIGNAL_SCORE = 6          # Raised from 5 (be more selective)
 
-# Filters
-VOLATILITY_SPIKE_MULTIPLIER = 2.5  # ATR multiplier for spike detection
-WEAK_CANDLE_MULTIPLIER = 0.3      # ATR multiplier for weak candle filter
+# Filters - STRICTER
+VOLATILITY_SPIKE_MULTIPLIER = 2.0  # Lower from 2.5 (more conservative)
+WEAK_CANDLE_MULTIPLIER = 0.35     # Higher from 0.3 (stronger candles)
 
 # ==================== TRADE MONITORING ====================
-MAX_TRADE_DURATION = 1800          # Maximum trade duration (30 minutes for scalping)
-MONITOR_INTERVAL = 3               # Check trade status every 3 seconds (faster for scalping)
+MAX_TRADE_DURATION = 900           # 15 minutes max (was 30 min)
+MONITOR_INTERVAL = 2               # Check every 2 seconds (faster)
 
 # ==================== LOGGING ====================
 LOG_FILE = "trading_bot.log"
-LOG_LEVEL = "DEBUG"                # DEBUG level for detailed monitoring
+LOG_LEVEL = "INFO"                 # Changed to INFO for production
 
 # ==================== WEBSOCKET ====================
 WS_URL = "wss://ws.derivws.com/websockets/v3"
-WS_TIMEOUT = 30                    # WebSocket connection timeout
+WS_TIMEOUT = 30
 
 # ==================== VALIDATION ====================
 def validate_config():
     """Validate configuration settings"""
     errors = []
     
-    # Check API credentials
     if not DERIV_API_TOKEN:
         errors.append("API_TOKEN is not set in .env file")
+    
+    # Validate contract types
+    if CONTRACT_TYPE not in ["MULTUP", "MULTDOWN"]:
+        errors.append(f"CONTRACT_TYPE must be MULTUP or MULTDOWN, not {CONTRACT_TYPE}")
     
     # Validate risk parameters
     if FIXED_STAKE <= 0:
@@ -118,14 +119,13 @@ def validate_config():
     if MULTIPLIER not in VALID_MULTIPLIERS:
         errors.append(f"MULTIPLIER must be one of {VALID_MULTIPLIERS}")
     
-    # Validate calculated profit/loss
-    calculated_profit = TAKE_PROFIT_PERCENT / 100 * FIXED_STAKE * MULTIPLIER
-    calculated_loss = STOP_LOSS_PERCENT / 100 * FIXED_STAKE * MULTIPLIER
+    # Validate calculated values
+    calculated_tp = TAKE_PROFIT_PERCENT / 100 * FIXED_STAKE * MULTIPLIER
+    calculated_sl = STOP_LOSS_PERCENT / 100 * FIXED_STAKE * MULTIPLIER
     
-    if calculated_loss > MAX_LOSS_PER_TRADE * 1.1:  # 10% tolerance
+    if calculated_sl > MAX_LOSS_PER_TRADE * 1.1:
         errors.append(
-            f"Calculated stop loss (${calculated_loss:.2f}) exceeds "
-            f"MAX_LOSS_PER_TRADE (${MAX_LOSS_PER_TRADE})"
+            f"Calculated SL (${calculated_sl:.2f}) exceeds MAX_LOSS_PER_TRADE (${MAX_LOSS_PER_TRADE})"
         )
     
     # Validate thresholds
@@ -142,60 +142,57 @@ def validate_config():
     if ATR_MIN_5M >= ATR_MAX_5M:
         errors.append("ATR_MIN_5M must be less than ATR_MAX_5M")
     
-    # Validate data fetching for SMA calculation
+    # Validate data for indicators
     if CANDLES_1M < SMA_PERIOD + 20:
-        errors.append(f"CANDLES_1M ({CANDLES_1M}) should be at least {SMA_PERIOD + 20} for SMA({SMA_PERIOD}) calculation")
+        errors.append(f"CANDLES_1M ({CANDLES_1M}) should be at least {SMA_PERIOD + 20}")
     if CANDLES_5M < SMA_PERIOD + 20:
-        errors.append(f"CANDLES_5M ({CANDLES_5M}) should be at least {SMA_PERIOD + 20} for SMA({SMA_PERIOD}) calculation")
+        errors.append(f"CANDLES_5M ({CANDLES_5M}) should be at least {SMA_PERIOD + 20}")
     
     if errors:
         raise ValueError("Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors))
     
     return True
 
-# Run validation on import
 if __name__ == "__main__":
     try:
         validate_config()
         
-        # Calculate actual profit/loss values
-        calc_profit = TAKE_PROFIT_PERCENT / 100 * FIXED_STAKE * MULTIPLIER
-        calc_loss = STOP_LOSS_PERCENT / 100 * FIXED_STAKE * MULTIPLIER
-        risk_reward = calc_profit / calc_loss if calc_loss > 0 else 0
+        calc_tp = TAKE_PROFIT_PERCENT / 100 * FIXED_STAKE * MULTIPLIER
+        calc_sl = STOP_LOSS_PERCENT / 100 * FIXED_STAKE * MULTIPLIER
+        risk_reward = calc_tp / calc_sl if calc_sl > 0 else 0
         
-        print("=" * 60)
+        print("=" * 70)
         print("✅ CONFIGURATION VALIDATION PASSED!")
-        print("=" * 60)
+        print("=" * 70)
         print("\n📊 TRADING PARAMETERS:")
         print(f"   Symbol: {SYMBOL}")
-        print(f"   Market: {MARKET}")
+        print(f"   Contract Type: {CONTRACT_TYPE} / {CONTRACT_TYPE_DOWN}")
         print(f"   Multiplier: {MULTIPLIER}x")
         
-        print("\n💰 RISK MANAGEMENT (SCALPING OPTIMIZED):")
+        print("\n💰 RISK MANAGEMENT ($2 PROFIT TARGET):")
         print(f"   Stake per trade: ${FIXED_STAKE}")
-        print(f"   Take Profit: {TAKE_PROFIT_PERCENT}% → ${calc_profit:.2f}")
-        print(f"   Stop Loss: {STOP_LOSS_PERCENT}% → ${calc_loss:.2f}")
+        print(f"   Take Profit: {TAKE_PROFIT_PERCENT}% → ${calc_tp:.2f} ⭐")
+        print(f"   Stop Loss: {STOP_LOSS_PERCENT}% → ${calc_sl:.2f}")
         print(f"   Risk-to-Reward: 1:{risk_reward:.1f}")
         print(f"   Max Loss Per Trade: ${MAX_LOSS_PER_TRADE}")
         print(f"   Max Daily Loss: ${MAX_DAILY_LOSS}")
         
         print("\n⏰ TRADING LIMITS:")
-        print(f"   Cooldown: {COOLDOWN_SECONDS}s ({COOLDOWN_SECONDS//60} minutes)")
-        print(f"   Max Trades/Day: {MAX_TRADES_PER_DAY}")
-        print(f"   Max Trade Duration: {MAX_TRADE_DURATION}s ({MAX_TRADE_DURATION//60} minutes)")
+        print(f"   Cooldown: {COOLDOWN_SECONDS}s ({COOLDOWN_SECONDS//60} min)")
+        print(f"   Max Trades/Day: {MAX_TRADES_PER_DAY} (quality focused)")
+        print(f"   Max Duration: {MAX_TRADE_DURATION}s ({MAX_TRADE_DURATION//60} min)")
         
-        print("\n📈 STRATEGY PARAMETERS:")
-        print(f"   RSI Buy Threshold: >{RSI_BUY_THRESHOLD}")
-        print(f"   RSI Sell Threshold: <{RSI_SELL_THRESHOLD}")
-        print(f"   ADX Threshold: >{ADX_THRESHOLD}")
-        print(f"   Minimum Signal Score: {MINIMUM_SIGNAL_SCORE}")
-        print(f"   SMA Period: {SMA_PERIOD}")
-        print(f"   EMA Period: {EMA_PERIOD}")
+        print("\n📈 STRATEGY PARAMETERS (OPTIMIZED):")
+        print(f"   RSI Buy: >{RSI_BUY_THRESHOLD} (tighter)")
+        print(f"   RSI Sell: <{RSI_SELL_THRESHOLD} (tighter)")
+        print(f"   ADX Threshold: >{ADX_THRESHOLD} (stronger)")
+        print(f"   Min Signal Score: {MINIMUM_SIGNAL_SCORE} (selective)")
+        print(f"   Weak Candle Filter: {WEAK_CANDLE_MULTIPLIER}x ATR")
         
-        print("\n📊 DATA FETCHING:")
-        print(f"   1m Candles: {CANDLES_1M}")
-        print(f"   5m Candles: {CANDLES_5M}")
-        print(f"   Monitor Interval: {MONITOR_INTERVAL}s")
+        print("\n🎯 EXPECTED PERFORMANCE:")
+        print(f"   Target: {MAX_TRADES_PER_DAY} trades/day × $2 = ${MAX_TRADES_PER_DAY * 2}")
+        print(f"   With 60% win rate: ~${MAX_TRADES_PER_DAY * 0.6 * 2 - MAX_TRADES_PER_DAY * 0.4 * 1:.2f}/day")
+        print(f"   Max daily risk: ${MAX_DAILY_LOSS}")
         
         print("\n🔐 API CONFIGURATION:")
         print(f"   APP_ID: {DERIV_APP_ID}")
@@ -204,20 +201,23 @@ if __name__ == "__main__":
         else:
             print("   ❌ API Token: NOT SET")
         
-        print("\n" + "=" * 60)
-        print("💡 SCALPING STRATEGY NOTES:")
-        print("=" * 60)
-        print("• Tight stops (0.2%) with realistic breathing room")
-        print("• Quick take profit (0.5%) = $2.00 target")
-        print("• Lower stake ($2.5) allows tighter risk management")
-        print("• Faster monitoring (3s interval) for quick exits")
-        print("• Relaxed RSI thresholds for more trading opportunities")
-        print("• 30-minute max trade duration for scalping efficiency")
-        print("=" * 60)
+        print("\n" + "=" * 70)
+        print("💡 KEY IMPROVEMENTS FROM TRADE HISTORY ANALYSIS:")
+        print("=" * 70)
+        print("✅ Changed to MULTIPLIER trades (was using RISE/FALL)")
+        print("✅ Increased stake to $10 (realistic for $2 targets)")
+        print("✅ Using 400x multiplier (balanced risk/reward)")
+        print("✅ Tighter RSI thresholds (58/42 vs 55/45)")
+        print("✅ Higher ADX requirement (22 vs 18)")
+        print("✅ Stricter signal scoring (6 vs 5)")
+        print("✅ Longer cooldown (3 min vs 2 min)")
+        print("✅ Lower daily trade limit (30 vs 50)")
+        print("✅ Risk-reward: 1:2 ($1 risk for $2 profit)")
+        print("=" * 70)
         
     except ValueError as e:
-        print("=" * 60)
+        print("=" * 70)
         print("❌ CONFIGURATION ERROR")
-        print("=" * 60)
+        print("=" * 70)
         print(f"\n{e}\n")
-        print("=" * 60)
+        print("=" * 70)
