@@ -1,6 +1,7 @@
 """
 Trade Engine for Deriv R_25 Trading Bot
 Handles trade execution and monitoring - FIXED WITH PROPER LIMIT_ORDER
+COMPLETE VERSION - All API validation errors resolved
 trade_engine.py
 """
 
@@ -217,21 +218,21 @@ class TradeEngine:
             else:
                 contract_type = config.CONTRACT_TYPE_DOWN  # MULTDOWN
             
-            # ⭐ CRITICAL FIX: Use DOLLAR AMOUNTS in limit_order ⭐
+            # ⭐ CRITICAL FIX: Correct Deriv API format ⭐
+            # Remove "amount_type" - API doesn't accept it
             buy_request = {
                 "buy": 1,
                 "price": stake,
                 "parameters": {
                     "amount": stake,
-                    "amount_type": "stake",
                     "basis": "stake",
                     "contract_type": contract_type,
                     "currency": "USD",
                     "multiplier": config.MULTIPLIER,
                     "symbol": config.SYMBOL,
-                    "limit_order": {  # ⭐ THIS IS THE KEY FIX ⭐
-                        "take_profit": self.take_profit_amount,  # Dollar amount, not percentage!
-                        "stop_loss": self.stop_loss_amount       # Dollar amount, not percentage!
+                    "limit_order": {
+                        "take_profit": self.take_profit_amount,
+                        "stop_loss": self.stop_loss_amount
                     }
                 }
             }
@@ -270,8 +271,8 @@ class TradeEngine:
                 'direction': direction,
                 'stake': stake,
                 'entry_price': entry_price,
-                'take_profit': self.take_profit_amount,  # Store dollar amount
-                'stop_loss': self.stop_loss_amount,      # Store dollar amount
+                'take_profit': self.take_profit_amount,
+                'stop_loss': self.stop_loss_amount,
                 'take_profit_percent': take_profit_percent,
                 'stop_loss_percent': stop_loss_percent,
                 'multiplier': config.MULTIPLIER,
