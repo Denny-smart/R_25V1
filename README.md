@@ -1,6 +1,6 @@
-# Deriv R_25 Trading Bot
+# Deriv Multi-Asset Trading Bot
 
-**Professional automated trading bot for Deriv's R_25 synthetic index using top-down market structure analysis.**
+**Professional automated trading bot for Deriv's volatility indices (R_25, R_50, R_75, etc.) using top-down market structure analysis.**
 
 Live Demo: https://r-25v1.onrender.com/docs/
 
@@ -8,12 +8,14 @@ Live Demo: https://r-25v1.onrender.com/docs/
 
 ## Key Features
 
+- **Multi-Asset Scanning** - Simultaneous analysis of multiple indices (R_25, R_50, R_75, etc.)
+- **Global Risk Control** - Strict "1 active trade" limit across ALL assets to prevent over-leverage
 - **Top-Down Strategy** - Weekly/Daily trend analysis with 1m/5m execution
-- **Multi-Timeframe Analysis** - Simultaneous analysis across 6 timeframes (1w, 1d, 4h, 1h, 5m, 1m)
+- **Smart Startup Recovery** - Automatically detects and manages existing open positions on restart
 - **Dynamic Risk Management** - Structure-based stops and level-based targets
+- **Enhanced Rich Notifications** - Real-time signals with strength bars, ROI tracking, and status badges
 - **REST API + WebSocket** - Full control and real-time monitoring
 - **JWT Authentication** - Secure access control
-- **Telegram Alerts** - Instant trade notifications
 - **Interactive Dashboard** - Swagger UI with live documentation
 
 ---
@@ -233,12 +235,15 @@ BULLISH BIAS (Weekly + Daily aligned)
 
 ### Multi-Layer Protection System
 
+### Multi-Layer Protection System
+
 | Protection Layer | Rule | Purpose |
 |------------------|------|---------|
-| **Daily Loss Limit** | -$10.00 max | Preserves capital |
+| **Global Position Lock** | 1 active trade (ALL assets) | **Prevents over-leveraging across portfolio** |
+| **Daily Loss Limit** | -$10.00 max (Global) | Preserves capital |
 | **Trade Frequency** | Max 30 trades/day | Prevents overtrading |
-| **Position Limit** | 1 active trade | No over-leveraging |
 | **Consecutive Loss** | 3 losses → cooldown | Stops bleed during drawdowns |
+| **Smart Recovery** | Auto-detect open trades | Prevents double-entry on restart |
 | **Market Conditions** | ATR/ADX filters | Avoids hostile conditions |
 
 ### Risk Modes
@@ -432,7 +437,8 @@ git push heroku main
 
 ```python
 # Trading Parameters
-SYMBOL = "R_25"                    # Deriv synthetic index
+SYMBOLS = ["R_25", "R_50", "R_75"] # Active assets
+SYMBOL = "R_25"                    # Default fallback
 MULTIPLIER = 160                   # Contract multiplier
 FIXED_STAKE = 10.0                 # Stake per trade ($)
 
@@ -489,10 +495,28 @@ TELEGRAM_CHAT_ID=123456789
 ```
 
 **Notifications:**
-- Signals: `BUY/SELL detected (Score: 8/10)`
-- Trades Opened: `Position #12345 opened at $1.50`
-- Trades Closed: `Won $1.80 (+20%) in 3m 45s`
-- Alerts: `Daily loss limit reached`
+
+The bot sends **rich, visual notifications** to keep you informed instantly:
+
+```text
+🟢 SIGNAL DETECTED: R_25
+━━━━━━━━━━━━━━━━━━━━
+📍 Direction: BUY
+📊 Strength: ▮▮▮▮▯ (8.0)
+📉 RSI: 55.4 | ADX: 28.1
+
+✅ TRADE WON: R_25
+━━━━━━━━━━━━━━━━━━━━
+💰 Net Result: $1.80
+📈 ROI: +20.0%
+━━━━━━━━━━━━━━━━━━━━
+⏱️ Duration: 3m 45s
+```
+
+- **Signals**: Real-time detection with strength bars
+- **Trades**: Entry price, stake, and projected targets
+- **Results**: P&L, ROI %, and duration metrics
+- **Alerts**: Daily loss limit and system warnings
 
 ### Performance Dashboard
 

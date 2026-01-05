@@ -30,39 +30,20 @@ class Settings(BaseSettings):
     # ============================================================================
     # Security & Authentication - UPDATED FOR AUTH
     # ============================================================================
-    # JWT Configuration
-    JWT_SECRET_KEY: str = Field(
-        default=os.getenv("JWT_SECRET_KEY", "your-super-secret-jwt-key-change-in-production-min-32-chars"),
-        description="Secret key for JWT token generation (min 32 characters)"
-    )
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
-    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    
-    # Initial Admin User
-    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
-    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")
-    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "admin@tradingbot.local")
-    
+    # ============================================================================
+    # Supabase Configuration
+    # ============================================================================
+    SUPABASE_URL: str = Field(..., description="Supabase Project URL")
+    SUPABASE_SERVICE_ROLE_KEY: str = Field(..., description="Supabase Service Role Key (for Admin actions)")
+    SUPABASE_ANON_KEY: Optional[str] = Field(None, description="Supabase Anon Key (optional, for client-side)")
+
     # Authentication Settings
     ENABLE_AUTHENTICATION: bool = os.getenv("ENABLE_AUTHENTICATION", "true").lower() == "true"
-    REQUIRE_AUTH_FOR_BOT_CONTROL: bool = True  # Require auth for start/stop/restart
-    REQUIRE_AUTH_FOR_CONFIG: bool = True  # Require auth for config changes
-    
-    # API Keys (alternative to JWT)
-    API_KEY_HEADER: str = "X-API-Key"
-    API_KEYS: List[str] = []  # Add API keys here or via environment
-    
-    # Password Requirements
-    MIN_PASSWORD_LENGTH: int = 8
-    REQUIRE_PASSWORD_UPPERCASE: bool = False
-    REQUIRE_PASSWORD_LOWERCASE: bool = False
-    REQUIRE_PASSWORD_DIGITS: bool = False
-    REQUIRE_PASSWORD_SPECIAL: bool = False
+    REQUIRE_AUTH_FOR_BOT_CONTROL: bool = True
     
     # Session Management
-    MAX_FAILED_LOGIN_ATTEMPTS: int = 5
-    LOCKOUT_DURATION_MINUTES: int = 15
+    API_KEY_HEADER: str = "X-API-Key"
+    API_KEYS: List[str] = []
     
     # ============================================================================
     # CORS Settings - UPDATED FOR PRODUCTION
@@ -209,13 +190,7 @@ class Settings(BaseSettings):
             raise ValueError(f"ENVIRONMENT must be one of {valid_envs}")
         return v
     
-    @field_validator("JWT_SECRET_KEY")
-    @classmethod
-    def validate_jwt_secret(cls, v: str) -> str:
-        """Ensure JWT secret is strong enough"""
-        if len(v) < 32:
-            raise ValueError("JWT_SECRET_KEY must be at least 32 characters for security")
-        return v
+    # JWT validator removed (using Supabase Auth now)
     
     # ============================================================================
     # Computed Properties
@@ -277,8 +252,8 @@ class Settings(BaseSettings):
         
         # Hide sensitive fields
         sensitive_fields = [
-            "JWT_SECRET_KEY",
-            "ADMIN_PASSWORD",
+            "SUPABASE_SERVICE_ROLE_KEY",
+            "SUPABASE_ANON_KEY",
             "API_KEYS",
             "DATABASE_URL",
             "REDIS_PASSWORD"
@@ -299,24 +274,7 @@ class Settings(BaseSettings):
             return True  # No API keys configured, allow all
         return api_key in self.API_KEYS
     
-    def validate_password_strength(self, password: str) -> tuple[bool, str]:
-        """Validate password meets requirements"""
-        if len(password) < self.MIN_PASSWORD_LENGTH:
-            return False, f"Password must be at least {self.MIN_PASSWORD_LENGTH} characters"
-        
-        if self.REQUIRE_PASSWORD_UPPERCASE and not any(c.isupper() for c in password):
-            return False, "Password must contain at least one uppercase letter"
-        
-        if self.REQUIRE_PASSWORD_LOWERCASE and not any(c.islower() for c in password):
-            return False, "Password must contain at least one lowercase letter"
-        
-        if self.REQUIRE_PASSWORD_DIGITS and not any(c.isdigit() for c in password):
-            return False, "Password must contain at least one digit"
-        
-        if self.REQUIRE_PASSWORD_SPECIAL and not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
-            return False, "Password must contain at least one special character"
-        
-        return True, "Password is strong"
+    # Password validation removed (handled by Google/Supabase)
 
 
 # ============================================================================
