@@ -36,35 +36,62 @@ async def get_current_user(
         
         if not user:
             return None
-            
-        # Check profiles table for approval status
-        # We use the service_role client (global 'supabase') to query the profiles table safely
-        # assuming RLS might block normal users from seeing 'is_approved' if not careful,
-        # but realistically the user should be able to see their own profile.
-        # However, to be safe and authoritative, we query profiles using the ID.
-        
+
+        # --- Auto-Promotion Logic ---
+        # Check if this user matches the INITIAL_ADMIN_EMAIL
+        if settings.INITIAL_ADMIN_EMAIL and user.email == settings.INITIAL_ADMIN_EMAIL:
+             # Check if we need to promote (optimization: check local var first, but DB is source of truth)
+             pass 
+             # We will do the promotion check after fetching the profile to avoid redundant writes
+
+        # Check profiles table for status
         profile_response = supabase.table('profiles').select('*').eq('id', user.id).single().execute()
         
-        if not profile_response.data:
-            # Profile doesn't exist yet (maybe trigger failed?)
+        role = 'user'
+        is_approved = False
+        created_at = user.created_at # Fallback
+
+        if profile_response.data:
+            profile = profile_response.data
+            role = profile.get('role', 'user')
+            is_approved = profile.get('is_approved', False)
+            created_at = profile.get('created_at')
+
+            # Check if we need to auto-promote NOW
+            if (settings.INITIAL_ADMIN_EMAIL and 
+                user.email == settings.INITIAL_ADMIN_EMAIL and 
+                (role != 'admin' or not is_approved)):
+                
+                logger.info(f"Auto-promoting initial admin: {user.email}")
+                supabase.table('profiles').update({
+                    'role': 'admin',
+                    'is_approved': True
+                }).eq('id', user.id).execute()
+                
+                # Update local vars to reflect change
+                role = 'admin'
+                is_approved = True
+
+        else:
+            # Profile doesn't exist yet (maybe trigger failed or race condition)
             logger.warning(f"Profile missing for user {user.id}")
-            return {
-                "id": user.id,
-                "email": user.email,
-                "is_approved": False,
-                "role": "unknown",
-                "aud": user.aud
-            }
             
-        profile = profile_response.data
-        
+            # If it's the admin email, we might want to CREATE the profile or just return approved state
+            # Ideally the trigger handles creation. If we are here, something might be slow.
+            # But we can still enforce the logic.
+            if settings.INITIAL_ADMIN_EMAIL and user.email == settings.INITIAL_ADMIN_EMAIL:
+                 role = 'admin'
+                 is_approved = True
+                 # We could optionally insert here, but let's assume the trigger or next call fixes it.
+                 # Actually, for robustness, if the trigger failed, we are in a weird state.
+                 # Let's just rely on the 'user' default.
+
         return {
             "id": user.id,
             "email": user.email,
-            "is_approved": profile.get('is_approved', False),
-            "role": profile.get('role', 'user'),
-            "created_at": profile.get('created_at'),
-            "aud": user.aud
+            "role": role,
+            "is_approved": is_approved,
+            "created_at": created_at
         }
         
     except Exception as e:
@@ -72,11 +99,12 @@ async def get_current_user(
         return None
 
 
-async def require_auth(
+async def require_login(
     current_user: Optional[Dict] = Depends(get_current_user)
 ) -> Dict:
     """
-    Dependency that REQUIRES authentication AND Admin Approval
+    Dependency that requires a valid JWT but IGNORES approval status.
+    Used for /auth/me to allow unapproved users to check their status.
     """
     if current_user is None:
         raise HTTPException(
@@ -84,7 +112,16 @@ async def require_auth(
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+    return current_user
+
+
+async def require_auth(
+    current_user: Dict = Depends(require_login)
+) -> Dict:
+    """
+    Dependency that REQUIRES authentication AND Admin Approval.
+    Used for all protected bot/trade routes.
+    """
     if not current_user.get("is_approved", False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -106,32 +143,3 @@ async def optional_auth(
 get_current_active_user = require_auth
 
 
-async def create_initial_admin():
-    """
-    Promote initial admin based on environment variable
-    """
-    import os
-    email = os.getenv("INITIAL_ADMIN_EMAIL")
-    if not email:
-        return
-        
-    try:
-        # Check if user exists
-        response = supabase.table('profiles').select('*').eq('email', email).execute()
-        if not response.data:
-            logger.warning(f"Initial admin email {email} not found in profiles")
-            return
-            
-        user = response.data[0]
-        if user.get('role') == 'admin' and user.get('is_approved'):
-            return
-            
-        # Promote
-        supabase.table('profiles').update({
-            'role': 'admin',
-            'is_approved': True
-        }).eq('id', user['id']).execute()
-        logger.info(f"Promoted {email} to admin")
-        
-    except Exception as e:
-        logger.error(f"Failed to create initial admin: {e}")

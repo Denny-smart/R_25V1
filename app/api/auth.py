@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from typing import Optional
 from pydantic import BaseModel
 
-from app.core.auth import require_auth, optional_auth
+from app.core.auth import require_auth, optional_auth, require_login
 
 router = APIRouter()
 
@@ -28,7 +28,7 @@ class AuthStatusResponse(BaseModel):
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: dict = Depends(require_auth)):
+async def get_current_user_info(current_user: dict = Depends(require_login)):
     """
     Get current authenticated user information.
     Fails if user is not approved.

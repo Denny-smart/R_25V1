@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     # Authentication Settings
     ENABLE_AUTHENTICATION: bool = os.getenv("ENABLE_AUTHENTICATION", "true").lower() == "true"
+    INITIAL_ADMIN_EMAIL: Optional[str] = os.getenv("INITIAL_ADMIN_EMAIL")
     REQUIRE_AUTH_FOR_BOT_CONTROL: bool = True
     
     # Session Management
