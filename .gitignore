@@ -54,6 +54,8 @@ trading_bot.log
 .pytest_cache/
 .coverage
 htmlcov/
+reproduce_issue.py
+verify_fix.py
 
 # ===================================
 # OS FILES

@@ -45,6 +45,8 @@ class TradingStrategy:
         Returns:
             Dict containing signal, levels, and trade parameters.
         """
+        passed_checks = []
+        
         response = {
             "can_trade": False,
             "signal": None,
@@ -53,7 +55,9 @@ class TradingStrategy:
             "take_profit": None,
             "stop_loss": None,
             "risk_reward_ratio": 0.0,
-            "details": {}
+            "details": {
+                "passed_checks": passed_checks
+            }
         }
 
         # 0. Data Validation
@@ -73,9 +77,11 @@ class TradingStrategy:
         if weekly_trend == "BULLISH" and daily_trend == "BULLISH":
             bias = "BULLISH"
             signal_direction = "UP"
+            passed_checks.append("Trend Alignment (Bullish)")
         elif weekly_trend == "BEARISH" and daily_trend == "BEARISH":
             bias = "BEARISH"
             signal_direction = "DOWN"
+            passed_checks.append("Trend Alignment (Bearish)")
         else:
             response["details"]["reason"] = f"Trend Conflict - Weekly: {weekly_trend}, Daily: {daily_trend}"
             return response
@@ -102,6 +108,8 @@ class TradingStrategy:
             response["details"]["reason"] = "No clear Structure Swing Point found for Stop Loss"
             return response
 
+        passed_checks.append("Market Structure (TP/SL Found)")
+
         # ---------------------------------------------------------
         # Phase 3: Entry Execution Criteria (1m/5m)
         # ---------------------------------------------------------
@@ -116,6 +124,7 @@ class TradingStrategy:
             is_mid_zone = True
         else:
             is_mid_zone = False
+            passed_checks.append("Not in Middle Zone")
 
         # 2. Find nearest active execution level (could be a 1h or 4h level we are breaking)
         # We add 1h and 5m levels for precise execution
@@ -125,6 +134,9 @@ class TradingStrategy:
         if not nearest_exec_level:
              # Fallback to structure levels if no local levels found
             nearest_exec_level = self._find_nearest_level(current_price, structure_levels)
+
+        if nearest_exec_level:
+             passed_checks.append(f"Key Level Found ({nearest_exec_level:.2f})")
 
         # 3. Check Momentum Breakout & Weak Retest
         # We look at recent history in 1m data to see if we just broke this level
@@ -139,6 +151,8 @@ class TradingStrategy:
             else:
                 response["details"]["reason"] = entry_reason
             return response
+            
+        passed_checks.append("Momentum Breakout Confirmed")
 
         # ---------------------------------------------------------
         # Final Calculations & Confluence Score
@@ -159,6 +173,8 @@ class TradingStrategy:
             response["stop_loss"] = sl_level
             response["risk_reward_ratio"] = round(rr_ratio, 2)
             return response
+
+        passed_checks.append(f"R:R Ratio OK ({rr_ratio:.2f})")
 
         # Confluence Score calculation
         score = 0
@@ -185,7 +201,8 @@ class TradingStrategy:
             "reason": "Confluence Confirmed",
             "bias": bias,
             "entry_type": "Breakout + Weak Retest",
-            "magnet_target": is_magnet
+            "magnet_target": is_magnet,
+            "passed_checks": passed_checks
         }
 
         return response

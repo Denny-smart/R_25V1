@@ -517,26 +517,34 @@ class BotRunner:
             logger.error(f"❌ {symbol} - Strategy analysis failed: {e}")
             raise
         
-        # Check if we have a tradeable signal
         if not signal.get('can_trade'):
-            reason = signal.get('details', {}).get('reason', 'Unknown')
+            details = signal.get('details', {})
+            reason = details.get('reason', 'Unknown')
+            passed_checks = details.get('passed_checks', [])
+            
+            # Format reason with checks
+            if passed_checks:
+                checks_str = ", ".join(passed_checks)
+                full_reason = f"{reason} (Checks Passed: {checks_str})"
+            else:
+                full_reason = reason
             
             # Smart Logging: Only log if reason changed or > 60s passed to avoid spam
             now = datetime.now()
             last_log = self.last_status_log.get(symbol, {'msg': '', 'time': datetime.min})
             
             should_log = False
-            if reason != last_log['msg']:
+            if full_reason != last_log['msg']:
                 should_log = True
             elif (now - last_log['time']).total_seconds() > 60:
                 should_log = True
                 
             if should_log:
-                logger.info(f"⏳ {symbol} - Skipped: {reason}")
-                self.last_status_log[symbol] = {'msg': reason, 'time': now}
+                logger.info(f"⏳ {symbol} - Skipped: {full_reason}")
+                self.last_status_log[symbol] = {'msg': full_reason, 'time': now}
             else:
                 # Debug only for spammy updates
-                logger.debug(f"⏭️ {symbol} - No signal: {reason}")
+                logger.debug(f"⏭️ {symbol} - No signal: {full_reason}")
                 
             return False
         

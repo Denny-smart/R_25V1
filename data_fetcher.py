@@ -139,41 +139,63 @@ class DataFetcher:
         self.last_request_time = asyncio.get_event_loop().time()
     
     async def send_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """Send request to API with rate limiting"""
-        try:
-            # Ensure connection is alive
-            if not await self.ensure_connected():
-                return {"error": {"message": "Failed to establish connection"}}
+        """Send request to API with robust retry logic"""
+        # Ensure connection is alive before starting
+        if not await self.ensure_connected():
+            return {"error": {"message": "Failed to establish early connection"}}
             
-            # Apply rate limiting
-            await self._rate_limit()
-            
-            async with self.request_lock:
-                await self.ws.send(json.dumps(request))
-                response = await self.ws.recv()
-                return json.loads(response)
+        # Apply rate limiting
+        await self._rate_limit()
+        
+        # Retry loop
+        for attempt in range(1, config.MAX_RETRIES + 1):
+            try:
+                # Ensure connection for this attempt
+                if not self.is_connected or not self.ws or self.ws.closed:
+                    logger.warning(f"[RETRY] Connection lost, reconnecting (Attempt {attempt})...")
+                    if not await self.reconnect():
+                        if attempt < config.MAX_RETRIES:
+                            await asyncio.sleep(config.RETRY_DELAY * attempt)
+                            continue
+                        else:
+                            return {"error": {"message": "Connection permanently lost"}}
+
+                async with self.request_lock:
+                    await self.ws.send(json.dumps(request))
+                    response_str = await self.ws.recv()
+                    response = json.loads(response_str)
                 
-        except (websockets.exceptions.ConnectionClosed, 
-                websockets.exceptions.ConnectionClosedError,
-                websockets.exceptions.ConnectionClosedOK) as e:
-            logger.warning(f"[WARNING] Connection closed during request: {e}")
+                # Check for specific transient API errors to retry
+                if "error" in response:
+                    error_msg = response["error"].get("message", "")
+                    # Retry on generic errors or rate limits, but not invalid parameters
+                    if "Sorry, an error occurred" in error_msg or "Rate limit" in error_msg:
+                         logger.warning(f"[RETRY] Transient API error: {error_msg} (Attempt {attempt}/{config.MAX_RETRIES})")
+                         if attempt < config.MAX_RETRIES:
+                             await asyncio.sleep(config.RETRY_DELAY * attempt)
+                             continue
+                
+                # If we get here, we have a valid response (success or non-retriable error)
+                return response
+                
+            except (websockets.exceptions.ConnectionClosed, 
+                    websockets.exceptions.ConnectionClosedError,
+                    websockets.exceptions.ConnectionClosedOK) as e:
+                logger.warning(f"[RETRY] Connection closed during request: {e} (Attempt {attempt}/{config.MAX_RETRIES})")
+                self.is_connected = False # Mark as disconnected to trigger reconnect next loop
+                if attempt < config.MAX_RETRIES:
+                     await asyncio.sleep(config.RETRY_DELAY * attempt)
+                else:
+                     return {"error": {"message": "Connection lost and max retries exceeded"}}
             
-            # Try to reconnect and retry once
-            if await self.reconnect():
-                try:
-                    async with self.request_lock:
-                        await self.ws.send(json.dumps(request))
-                        response = await self.ws.recv()
-                        return json.loads(response)
-                except Exception as retry_error:
-                    logger.error(f"[ERROR] Retry failed: {retry_error}")
-                    return {"error": {"message": str(retry_error)}}
-            
-            return {"error": {"message": "Connection lost and reconnection failed"}}
-            
-        except Exception as e:
-            logger.error(f"[ERROR] Request error: {e}")
-            return {"error": {"message": str(e)}}
+            except Exception as e:
+                logger.error(f"[ERROR] Request exception: {e} (Attempt {attempt}/{config.MAX_RETRIES})")
+                if attempt < config.MAX_RETRIES:
+                    await asyncio.sleep(config.RETRY_DELAY * attempt)
+                else:
+                    return {"error": {"message": f"Request failed after retries: {str(e)}"}}
+        
+        return {"error": {"message": "Request failed: Max retries exhausted"}}
     
     async def fetch_candles(self, symbol: str, granularity: int, 
                            count: int) -> Optional[pd.DataFrame]:
