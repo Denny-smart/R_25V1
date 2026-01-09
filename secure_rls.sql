@@ -1,29 +1,85 @@
--- Enable Row Level Security
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
+-- Helper Function to check Admin status (Security Definer to avoid RLS recursion)
+create or replace function public.is_admin()
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  return exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  );
+end;
+$$;
 
--- Profiles: Users can only see/edit their own profile
-CREATE POLICY "Users can view own profile" 
-ON profiles FOR SELECT 
-USING (auth.uid() = id);
+-- Function to clean up auth.users when profile is deleted
+create or replace function public.delete_user_from_auth()
+returns trigger 
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from auth.users where id = old.id;
+  return old;
+end;
+$$;
 
-CREATE POLICY "Users can update own profile" 
-ON profiles FOR UPDATE 
-USING (auth.uid() = id);
+-- Create the trigger on the profiles table
+drop trigger if exists on_profile_delete on public.profiles;
+create trigger on_profile_delete
+  after delete on public.profiles
+  for each row execute procedure public.delete_user_from_auth();
 
--- Trades: Users can only see/edit their own trades
-CREATE POLICY "Users can view own trades" 
-ON trades FOR SELECT 
-USING (auth.uid() = user_id);
+-- Fix security warning for existing handle_new_user function if it exists
+do $$
+begin
+  if exists (select 1 from pg_proc where proname = 'handle_new_user') then
+    alter function public.handle_new_user() set search_path = public;
+  end if;
+end $$;
 
-CREATE POLICY "Users can insert own trades" 
-ON trades FOR INSERT 
-WITH CHECK (auth.uid() = user_id);
+-- Enable RLS
+alter table public.profiles enable row level security;
 
--- Admins: Service Role (Bypasses RLS by default, but nice to be explicit if using admin user)
--- Note: Supabase SERVICE_ROLE_KEY bypasses all these policies automatically.
--- These policies are for Authenticated Users (auth.role() = 'authenticated')
+-- CLEANUP: Drop all previous versions of policies
+drop policy if exists "Admins can delete profiles" on public.profiles;
+drop policy if exists "Profiles visible to owner and admins" on public.profiles;
+drop policy if exists "Public profiles are viewable by everyone" on public.profiles; 
+drop policy if exists "Admins can update any profile" on public.profiles;
+drop policy if exists "Users can update own profile" on public.profiles;
+drop policy if exists "Admins or owners can update profile" on public.profiles;
+drop policy if exists "Users can insert their own profile" on public.profiles;
 
--- Ensure no public access
-DROP POLICY IF EXISTS "Public profiles access" ON profiles;
-DROP POLICY IF EXISTS "Public trades access" ON trades;
+-- DELETE Policy (Admins only)
+create policy "Admins can delete profiles"
+  on public.profiles
+  for delete
+  using ( (select public.is_admin()) );
+
+-- SELECT Policy (Combined: Admin OR Owner)
+create policy "Profiles visible to owner and admins"
+  on public.profiles
+  for select
+  using (
+    (select auth.uid()) = id
+    or
+    (select public.is_admin())
+  );
+
+-- UPDATE Policy (Combined: Admin OR Owner)
+create policy "Admins or owners can update profile"
+  on public.profiles
+  for update
+  using (
+    (select auth.uid()) = id
+    or
+    (select public.is_admin())
+  );
+
+-- INSERT Policy (Users can insert own profile)
+create policy "Users can insert their own profile"
+  on public.profiles
+  for insert
+  with check ( (select auth.uid()) = id );
