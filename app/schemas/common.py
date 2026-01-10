@@ -22,6 +22,10 @@ class PerformanceResponse(BaseModel):
     total_trades: int = Field(..., ge=0)
     win_rate: float = Field(..., ge=0.0, le=100.0)
     total_pnl: float
+    cpu_usage: Optional[float] = Field(None, ge=0.0, le=100.0)
+    memory_usage: Optional[float] = Field(None, ge=0.0, le=100.0)
+    error_rate: Optional[float] = Field(None, ge=0.0, le=100.0)
+    active_connections: Optional[int] = Field(None, ge=0)
 
 
 class ConfigResponse(BaseModel):
