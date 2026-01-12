@@ -355,5 +355,23 @@ class TelegramNotifier:
         
         await self.send_message(message)
 
+    async def notify_approval_request(self, user_info: Dict):
+        """Notify admin about a new user approval request"""
+        email = user_info.get('email', 'Unknown')
+        user_id = user_info.get('id', 'Unknown')
+        
+        message = (
+            "👤 <b>NEW USER REQUEST</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"📧 Email: <code>{email}</code>\n"
+            f"🆔 ID: <code>{user_id}</code>\n\n"
+            "⚠️ <b>Action Required</b>\n"
+            "This user has requested access to the dashboard.\n"
+            "Please review and approve via Supabase or Admin API.\n\n"
+            f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        await self.send_message(message)
+
 # Create global instance
 notifier = TelegramNotifier()

@@ -8,6 +8,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.core.auth import require_auth, optional_auth, require_login
+from telegram_notifier import notifier
 
 router = APIRouter()
 
@@ -64,3 +65,19 @@ async def check_approval(current_user: Optional[dict] = Depends(optional_auth)):
         "approved": current_user.get("is_approved", False),
         "email": current_user.get("email")
     }
+
+
+@router.post("/request-approval")
+async def request_approval(current_user: dict = Depends(require_login)):
+    """
+    Request admin approval for the current user.
+    Sends a notification to the admin via Telegram.
+    """
+    # 1. Check if already approved
+    if current_user.get("is_approved", False):
+         return {"message": "User is already approved."}
+    
+    # 2. Send notification
+    await notifier.notify_approval_request(current_user)
+    
+    return {"message": "Approval request sent successfully. Please wait for admin processing."}
