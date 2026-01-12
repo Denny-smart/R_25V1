@@ -24,6 +24,21 @@ import config
 from app.bot.state import BotState
 from app.bot.events import event_manager
 from app.bot.telegram_bridge import telegram_bridge
+from app.core.context import user_id_var
+from functools import wraps
+
+def with_user_context(func):
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        token = None
+        if self.account_id:
+            token = user_id_var.set(self.account_id)
+        try:
+            return await func(self, *args, **kwargs)
+        finally:
+            if token:
+                user_id_var.reset(token)
+    return wrapper
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +94,7 @@ class BotRunner:
         # Telegram bridge
         self.telegram_bridge = telegram_bridge
     
+    @with_user_context
     async def start_bot(self, api_token: Optional[str] = None) -> dict:
         """
         Start the trading bot
@@ -151,6 +167,7 @@ class BotRunner:
                 "status": self.status.value
             }
     
+    @with_user_context
     async def stop_bot(self) -> dict:
         """
         Stop the trading bot gracefully
@@ -271,6 +288,7 @@ class BotRunner:
             }
         }
     
+    @with_user_context
     async def _run_bot(self):
         """
         Main bot loop - Multi-asset sequential scanner
