@@ -412,7 +412,7 @@ class BotRunner:
             
             # Notify Telegram
             try:
-                await self.telegram_bridge.notify_bot_started(balance or 0.0, current_stake, self.active_strategy)
+                await self.telegram_bridge.notify_bot_started(balance or 0.0, self.user_stake, self.active_strategy)
             except Exception as e:
                 logger.warning(f"⚠️ Telegram notification failed: {e}")
             
