@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import config
 from utils import setup_logger
+from indicators import calculate_rsi, calculate_adx
 
 logger = setup_logger()
 
@@ -192,6 +193,14 @@ class TradingStrategy:
         if is_magnet:
             score += 2
 
+        # Calculate Indicators for Logging (using 5m data for stability)
+        try:
+            rsi_val = calculate_rsi(data_5m).iloc[-1] if not data_5m.empty else 0
+            adx_val = calculate_adx(data_5m).iloc[-1] if not data_5m.empty else 0
+        except Exception:
+            rsi_val = 0
+            adx_val = 0
+
         # Construct Final Response
         response["can_trade"] = True
         response["signal"] = signal_direction
@@ -205,7 +214,9 @@ class TradingStrategy:
             "bias": bias,
             "entry_type": "Breakout + Weak Retest",
             "magnet_target": is_magnet,
-            "passed_checks": passed_checks
+            "passed_checks": passed_checks,
+            "rsi": round(rsi_val, 2),
+            "adx": round(adx_val, 2)
         }
 
         return response
@@ -346,9 +357,23 @@ class TradingStrategy:
             # Sort by proximity
             potential_tps.sort(key=lambda x: x['price'])
             
-            # Prioritize NEAREST level (closer TP = better win rate)
+            # Prioritize NEAREST level that satisfies min distance
             if potential_tps:
-                target = potential_tps[0]['price']
+                # Default to None, look for valid level
+                for level in potential_tps:
+                    dist_pct = abs(level['price'] - current_price) / current_price * 100
+                    if dist_pct >= config.MIN_TP_DISTANCE_PCT:
+                        target = level['price']
+                        break
+                
+                # If all levels are too close, we might want to default to the furthest one 
+                # or just leave as None (no valid target).
+                # Logic: If we have levels but all are < 0.2%, maybe the volatility is super low.
+                # Let's fallback to the last (furthest) one if nothing qualified, 
+                # effectively targeting the "next" available if we ran out.
+                # However, strict adherence says we skip "too close". 
+                # If everything is too close, we shouldn't trade.
+                pass
 
             # SL: Last Swing Low BELOW current price (5M -> 1H -> 4H -> Daily)
             # Try 5M first (Scalping precision)
@@ -384,9 +409,13 @@ class TradingStrategy:
             # Sort by proximity (descending)
             potential_tps.sort(key=lambda x: x['price'], reverse=True)
             
-            # Prioritize NEAREST level
+            # Prioritize NEAREST level that satisfies min distance
             if potential_tps:
-                target = potential_tps[0]['price']
+                for level in potential_tps:
+                    dist_pct = abs(level['price'] - current_price) / current_price * 100
+                    if dist_pct >= config.MIN_TP_DISTANCE_PCT:
+                        target = level['price']
+                        break
 
             # SL: Last Swing High ABOVE current price (5M -> 1H -> 4H -> Daily)
             # Try 5M first

@@ -185,15 +185,19 @@ STRUCTURE_CONFIRMATION_CANDLES = 3 # Wait N candles to confirm structure break
 TOPDOWN_USE_DYNAMIC_TP = True      # TP based on untested levels (not fixed %)
 TOPDOWN_USE_STRUCTURE_SL = True    # SL based on swing points (not fixed %)
 TOPDOWN_MIN_RR_RATIO = 2.0         # Minimum 1:2.0 risk/reward to take trade (aligned with MIN_RR_RATIO)
-TOPDOWN_MAX_SL_DISTANCE_PCT = 0.5  # Maximum SL distance: 0.5% from entry
+TOPDOWN_MAX_SL_DISTANCE_PCT = 1.5  # Maximum SL distance: 1.5% from entry
 
 # Exit strategy - TP/SL only (no time-based exits)
 EXIT_STRATEGY = "TP_SL_ONLY"       # Only exit on Take Profit or Stop Loss hits
 
 # ==================== TP/SL BUFFER SETTINGS ====================
 TP_BUFFER_PCT = 0.1                # 0.1% before actual level (early exit buffer)
-SL_BUFFER_PCT = 0.2                # 0.2% beyond swing (safety margin)
+SL_BUFFER_PCT = 0.3                # 0.3% beyond swing (safety margin)
 MIN_TP_DISTANCE_PCT = 0.2          # Minimum TP distance from entry
+
+# ==================== TRAILING STOP SETTINGS ====================
+SECURE_PROFIT_TRIGGER = 5.0        # Trigger trailing stop when profit hits $5.00
+SECURE_PROFIT_BUFFER = 2.0         # Trail by $2.00 (Stop at $3.00 if peak is $5.00)
 
 # ==================== CONFLUENCE SCORING ====================
 CONFLUENCE_WEIGHT_HIGHER_TF = 2.0  # Higher timeframe levels weighted 2x

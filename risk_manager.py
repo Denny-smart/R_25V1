@@ -472,9 +472,9 @@ class RiskManager:
             self.active_trade['highest_unrealized_pnl'] = current_pnl
             current_peak = current_pnl
             
-        # Rule: Once profit hit +$20, enforce trailing stop
-        SECURE_PROFIT_TRIGGER = 20.0
-        TRAILING_BUFFER = 5.0
+        # Rule: Once profit hit trigger, enforce trailing stop
+        SECURE_PROFIT_TRIGGER = config.SECURE_PROFIT_TRIGGER
+        TRAILING_BUFFER = config.SECURE_PROFIT_BUFFER
         
         if current_peak >= SECURE_PROFIT_TRIGGER:
             stop_level = current_peak - TRAILING_BUFFER
