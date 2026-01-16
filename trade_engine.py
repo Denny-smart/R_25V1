@@ -631,6 +631,7 @@ class TradeEngine:
                         final_status = await self.get_trade_status(contract_id)
                         if final_status:
                             final_status['exit_reason'] = exit_check['reason']
+                            final_status['symbol'] = symbol  # Ensure symbol is returned
                         # Removed redundant notification here - Runner handles it
                         return final_status
                     
@@ -658,6 +659,7 @@ class TradeEngine:
                     
                     # Removed redundant notification here - Runner handles it
                     
+                    status['symbol'] = symbol  # Ensure symbol is returned
                     return status
                 
                 # Periodic status logging
