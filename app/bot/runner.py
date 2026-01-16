@@ -25,6 +25,7 @@ from app.bot.state import BotState
 from app.bot.events import event_manager
 from app.bot.telegram_bridge import telegram_bridge
 from app.core.context import user_id_var
+from app.services.trades_service import UserTradesService  # ← NEW IMPORT
 from functools import wraps
 
 def with_user_context(func):
@@ -144,6 +145,18 @@ class BotRunner:
             self.error_message = None
             self.state.update_status("starting")
             
+            # Load historical trades from DB
+            try:
+                history = UserTradesService.get_user_trades(self.account_id, limit=100)
+                if history:
+                    # Update state with history 
+                    # Note: We need to adapt the format slightly if needed, but BotState expects dicts
+                    # We might want to populate stats based on this history too
+                    self.state.trade_history = history
+                    logger.info(f"📜 Loaded {len(history)} historical trades from DB")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load trade history: {e}")
+
             # Create bot task
             self.task = asyncio.create_task(self._run_bot())
             
@@ -669,13 +682,16 @@ class BotRunner:
             pass
         
         # Broadcast signal to WebSockets
+        timestamp = datetime.now().isoformat()
+        signal['timestamp'] = timestamp # CRITICAL: Track signal time for result linking
+        
         await event_manager.broadcast({
             "type": "signal",
             "symbol": symbol,
             "signal": signal['signal'],
             "score": signal.get('score', 0),
             "confidence": signal.get('confidence', 0),
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": timestamp,
             "account_id": self.account_id
         })
         
@@ -737,6 +753,9 @@ class BotRunner:
                 # Record trade closure
                 self.risk_manager.record_trade_close(contract_id, pnl, status)
                 self.state.update_trade(contract_id, result)
+
+                # Persist to Supabase
+                UserTradesService.save_trade(self.account_id, result)
                 
                 # Notify Telegram
                 try:
@@ -766,6 +785,30 @@ class BotRunner:
                 # Update statistics
                 stats = self.risk_manager.get_statistics()
                 self.state.update_statistics(stats)
+                
+                # CRITICAL: Update signal result and broadcast
+                signal_timestamp = signal_with_symbol.get('timestamp')
+                if signal_timestamp:
+                    self.state.update_signal_result(signal_timestamp, status, pnl)
+                    
+                    await event_manager.broadcast({
+                        "type": "signal_updated",
+                        "timestamp": signal_timestamp,
+                        "result": status,
+                        "pnl": pnl,
+                        "account_id": self.account_id
+                    })
+
+                    # Send UI Notification
+                    notification_type = "success" if pnl > 0 else "error" if pnl < 0 else "info"
+                    await event_manager.broadcast({
+                        "type": "notification",
+                        "level": notification_type,
+                        "title": f"Trade {status.title()}",
+                        "message": f"{symbol} trade closed. P&L: ${pnl:.2f}",
+                        "timestamp": datetime.now().isoformat(),
+                        "account_id": self.account_id
+                    })
                 
                 await event_manager.broadcast({
                     "type": "statistics",

@@ -106,7 +106,9 @@ class BotState:
         """Add signal to recent signals"""
         with self._lock:
             signal_copy = signal.copy()
-            signal_copy['timestamp'] = datetime.now().isoformat()
+            if 'timestamp' not in signal_copy:
+                signal_copy['timestamp'] = datetime.now().isoformat()
+            
             self.recent_signals.insert(0, signal_copy)
             
             # Trim signals
@@ -114,6 +116,18 @@ class BotState:
                 self.recent_signals = self.recent_signals[:self.max_signals]
             
             logger.debug(f"Signal added: {signal.get('signal')}")
+
+    def update_signal_result(self, signal_timestamp: str, result: str, pnl: float):
+        """Update signal with trade result"""
+        with self._lock:
+            for signal in self.recent_signals:
+                if signal.get('timestamp') == signal_timestamp:
+                    signal['result'] = result
+                    signal['pnl'] = pnl
+                    signal['updated_at'] = datetime.now().isoformat()
+                    logger.debug(f"Signal updated: {result} ({pnl})")
+                    return True
+            return False
     
     def update_statistics(self, stats: Dict):
         """Update trading statistics"""
