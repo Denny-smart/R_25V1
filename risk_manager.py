@@ -659,6 +659,10 @@ class RiskManager:
         avg_win = sum(wins) / len(wins) if wins else 0
         avg_loss = sum(losses) / len(losses) if losses else 0
         
+        gross_profit = sum(wins)
+        gross_loss = sum(losses)
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else (float('inf') if gross_profit > 0 else 0.0)
+        
         # Strategy-specific metrics
         total_attempted = len(self.trades_today)
         cancellation_rate = (self.trades_cancelled / total_attempted * 100) if total_attempted > 0 else 0
@@ -680,6 +684,7 @@ class RiskManager:
             'cancelled_exits': cancelled_exits,
             'avg_win': avg_win,
             'avg_loss': avg_loss,
+            'profit_factor': profit_factor,
             'consecutive_losses': self.consecutive_losses,
             'circuit_breaker_active': self.consecutive_losses >= self.max_consecutive_losses,
             'strategy_mode': 'topdown' if self.use_topdown else ('wait_cancel' if self.cancellation_enabled else 'legacy'),

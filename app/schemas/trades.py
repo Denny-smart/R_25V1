@@ -28,5 +28,12 @@ class TradeStatsResponse(BaseModel):
     total_pnl: float
     daily_pnl: float
     
+    # Extended stats for dashboard
+    avg_win: Optional[float] = 0.0
+    avg_loss: Optional[float] = 0.0
+    largest_win: Optional[float] = 0.0
+    largest_loss: Optional[float] = 0.0
+    profit_factor: Optional[float] = 0.0
+    
     class Config:
         from_attributes = True

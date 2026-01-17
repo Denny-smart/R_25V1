@@ -61,3 +61,80 @@ class UserTradesService:
         except Exception as e:
             logger.error(f"❌ Error fetching trade history: {e}")
             return []
+
+    @staticmethod
+    def get_user_stats(user_id: str) -> Dict:
+        """
+        Calculate lifetime statistics for a user from the database.
+        """
+        try:
+            # Fetch all user trades (or a sufficiently large limit for stats)
+            # Efficient way would be specific aggregation query, but Supabase-py might be limited.
+            # For now, fetch ALL (assuming < 10k trades) or last 1000.
+            response = supabase.table("trades")\
+                .select("*")\
+                .eq("user_id", user_id)\
+                .execute()
+            
+            trades = response.data if response.data else []
+            
+            total_trades = len(trades)
+            if total_trades == 0:
+                return {
+                    "total_trades": 0,
+                    "winning_trades": 0,
+                    "losing_trades": 0,
+                    "win_rate": 0.0,
+                    "total_pnl": 0.0,
+                    "daily_pnl": 0.0, # Not easily calculable without date filter, set 0
+                    "avg_win": 0.0,
+                    "avg_loss": 0.0,
+                    "largest_win": 0.0,
+                    "largest_loss": 0.0,
+                    "profit_factor": 0.0
+                }
+            
+            # Calculate stats
+            wins = [t.get('profit', 0) for t in trades if t.get('profit', 0) > 0]
+            losses = [abs(t.get('profit', 0)) for t in trades if t.get('profit', 0) < 0]
+            
+            winning_trades = len(wins)
+            losing_trades = len(losses)
+            win_rate = (winning_trades / total_trades) * 100
+            
+            total_pnl = sum([t.get('profit', 0) for t in trades])
+            
+            avg_win = sum(wins) / winning_trades if winning_trades else 0
+            avg_loss = sum(losses) / losing_trades if losing_trades else 0
+            
+            largest_win = max(wins) if wins else 0
+            largest_loss = max(losses) if losses else 0
+            
+            gross_profit = sum(wins)
+            gross_loss = sum(losses)
+            profit_factor = gross_profit / gross_loss if gross_loss > 0 else (float('inf') if gross_profit > 0 else 0.0)
+
+            return {
+                "total_trades": total_trades,
+                "winning_trades": winning_trades,
+                "losing_trades": losing_trades,
+                "win_rate": win_rate,
+                "total_pnl": total_pnl,
+                "daily_pnl": 0.0, # Placeholder or calc if needed
+                "avg_win": avg_win,
+                "avg_loss": avg_loss,
+                "largest_win": largest_win,
+                "largest_loss": largest_loss,
+                "profit_factor": profit_factor
+            }
+                
+        except Exception as e:
+            logger.error(f"❌ Error calculating user stats: {e}")
+            return {
+                "total_trades": 0,
+                "winning_trades": 0,
+                "losing_trades": 0,
+                "win_rate": 0.0,
+                "total_pnl": 0.0,
+                "daily_pnl": 0.0
+            }

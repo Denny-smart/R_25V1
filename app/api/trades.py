@@ -41,8 +41,9 @@ async def get_trade_history(
 
 @router.get("/stats", response_model=TradeStatsResponse)
 async def get_trade_stats(
-    current_user: dict = Depends(get_current_active_user)  # ← ADD AUTH
+    current_user: dict = Depends(get_current_active_user)
 ):
-    """Get trading statistics"""
-    stats = bot_manager.get_bot(current_user['id']).state.get_statistics()
-    return prepare_response(stats)  # ← WRAP WITH prepare_response
+    """Get trading statistics from persistent storage"""
+    from app.services.trades_service import UserTradesService
+    stats = UserTradesService.get_user_stats(current_user['id'])
+    return prepare_response(stats)
