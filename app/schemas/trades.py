@@ -2,7 +2,7 @@
 Pydantic schemas for trade-related responses
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, AliasChoices
 from typing import Optional
 
 class TradeResponse(BaseModel):
@@ -14,7 +14,7 @@ class TradeResponse(BaseModel):
     take_profit: Optional[float] = None
     stop_loss: Optional[float] = None
     status: str
-    pnl: Optional[float] = None
+    pnl: Optional[float] = Field(None, validation_alias=AliasChoices('profit', 'pnl'))
     
     class Config:
         from_attributes = True  # For Pydantic v2 compatibility
