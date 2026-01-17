@@ -1,19 +1,21 @@
 -- Create trades table to persist trade history
-create table if not exists public.trades (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references auth.users not null,
+create table public.trades (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid not null,
   contract_id text not null,
   symbol text not null,
   signal text not null,
-  stake numeric,
-  entry_price numeric,
-  exit_price numeric,
-  profit numeric,
-  status text,
-  timestamp timestamptz default now(),
-  created_at timestamptz default now(),
-  unique(contract_id)
-);
+  stake numeric null,
+  entry_price numeric null,
+  exit_price numeric null,
+  profit numeric null,
+  status text null,
+  timestamp timestamp with time zone null default now(),
+  created_at timestamp with time zone null default now(),
+  constraint trades_pkey primary key (id),
+  constraint trades_contract_id_key unique (contract_id),
+  constraint trades_user_id_fkey foreign KEY (user_id) references auth.users (id)
+) TABLESPACE pg_default;
 
 -- Enable RLS
 alter table public.trades enable row level security;
